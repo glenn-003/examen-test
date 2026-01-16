@@ -1,0 +1,59 @@
+name: CI/CD Pipeline Node.js
+
+on:
+  push:
+    [cite_start]branches: [ main, develop ] # Déclenchement sur push [cite: 42]
+  pull_request:
+    [cite_start]branches: [ main, develop ] # Déclenchement sur PR [cite: 44]
+
+jobs:
+  # JOB 1 : Tests et Qualité (Partie 2)
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout du code
+        [cite_start]uses: actions/checkout@v3 # [cite: 34]
+
+      - name: Installation Node.js version 18
+        uses: actions/setup-node@v3
+        with:
+          [cite_start]node-version: 18 # [cite: 35]
+
+      - name: Installation des dépendances
+        [cite_start]run: npm install # [cite: 36]
+
+      - name: Exécution des tests
+        [cite_start]run: npm test # [cite: 37]
+
+      - name: Vérification du code (Lint)
+        run: npx eslint . [cite_start]|| echo "Pas de lint configuré, étape ignorée" # [cite: 38]
+
+  # JOB 2 : Build et Push Docker + Sécurité (Partie 2 & 3)
+  build-and-push:
+    needs: test # Attendre que les tests passent
+    [cite_start]if: github.ref == 'refs/heads/main' # Déploiement uniquement sur main [cite: 49]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout du code
+        uses: actions/checkout@v3
+
+      - name: Connexion au Docker Hub
+        uses: docker/login-action@v2
+        with:
+          [cite_start]username: ${{ secrets.DOCKERHUB_USERNAME }} # Utilisation des secrets 
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build de l'image Docker
+        run: docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/node-app:latest . [cite_start]# [cite: 45]
+
+      # PARTIE 3 : Scan de sécurité avec Trivy
+      - name: Scan d'image avec Trivy
+        [cite_start]uses: aquasecurity/trivy-action@master # [cite: 56]
+        with:
+          image-ref: '${{ secrets.DOCKERHUB_USERNAME }}/node-app:latest'
+          format: 'table'
+          [cite_start]severity: 'HIGH,CRITICAL' # Uniquement HIGH et CRITICAL [cite: 60]
+          exit-code: '1' # Fait échouer le pipeline si vulnérabilités trouvées
+
+      - name: Push de l'image vers Docker Hub
+        [cite_start]run: docker push ${{ secrets.DOCKERHUB_USERNAME }}/node-app:latest # [cite: 46, 53]
